@@ -1,7 +1,121 @@
 const tests = @import("tests.zig");
-const builtin = @import("builtin");
+const std = @import("std");
 
 pub fn addCases(cases: *tests.CompileErrorContext) void {
+    cases.addTest("type mismatch with tuple concatenation",
+        \\export fn entry() void {
+        \\    var x = .{};
+        \\    x = x ++ .{ 1, 2, 3 };
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:3:11: error: expected type 'struct:2:14', found 'struct:3:11'",
+    });
+
+    cases.addTest("@tagName on invalid value of non-exhaustive enum",
+        \\test "enum" {
+        \\    const E = enum(u8) {A, B, _};
+        \\    _ = @tagName(@intToEnum(E, 5));
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:3:18: error: no tag by value 5",
+    });
+
+    cases.addTest("@ptrToInt with pointer to zero-sized type",
+        \\export fn entry() void {
+        \\    var pointer: ?*u0 = null;
+        \\    var x = @ptrToInt(pointer);
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:3:23: error: pointer to size 0 type has no address",
+    });
+
+    cases.addTest("slice to pointer conversion mismatch",
+        \\pub fn bytesAsSlice(bytes: var) [*]align(1) const u16 {
+        \\    return @ptrCast([*]align(1) const u16, bytes.ptr)[0..1];
+        \\}
+        \\test "bytesAsSlice" {
+        \\    const bytes = [_]u8{ 0xDE, 0xAD, 0xBE, 0xEF };
+        \\    const slice = bytesAsSlice(bytes[0..]);
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:2:54: error: expected type '[*]align(1) const u16', found '[]align(1) const u16'",
+    });
+
+    cases.addTest("access invalid @typeInfo decl",
+        \\const A = B;
+        \\test "Crash" {
+        \\    _ = @typeInfo(@This()).Struct.decls[0];
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:1:11: error: use of undeclared identifier 'B'",
+    });
+
+    cases.addTest("reject extern function definitions with body",
+        \\extern "c" fn definitelyNotInLibC(a: i32, b: i32) i32 {
+        \\    return a + b;
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:1:1: error: extern functions have no body",
+    });
+
+    cases.addTest("duplicate field in anonymous struct literal",
+        \\export fn entry() void {
+        \\    const anon = .{
+        \\        .inner = .{
+        \\            .a = .{
+        \\                .something = "text",
+        \\            },
+        \\            .a = .{},
+        \\        },
+        \\    };
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:7:13: error: duplicate field",
+        "tmp.zig:4:13: note: other field here",
+    });
+
+    cases.addTest("type mismatch in C prototype with varargs",
+        \\const fn_ty = ?fn ([*c]u8, ...) callconv(.C) void;
+        \\extern fn fn_decl(fmt: [*:0]u8, ...) void;
+        \\
+        \\export fn main() void {
+        \\    const x: fn_ty = fn_decl;
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:5:22: error: expected type 'fn([*c]u8, ...) callconv(.C) void', found 'fn([*:0]u8, ...) callconv(.C) void'",
+    });
+
+    cases.addTest("dependency loop in top-level decl with @TypeInfo when accessing the decls",
+        \\export const foo = @typeInfo(@This()).Struct.decls;
+    , &[_][]const u8{
+        "tmp.zig:1:20: error: dependency loop detected",
+        "tmp.zig:1:45: note: referenced here",
+    });
+
+    cases.add("function call assigned to incorrect type",
+        \\export fn entry() void {
+        \\    var arr: [4]f32 = undefined;
+        \\    arr = concat();
+        \\}
+        \\fn concat() [16]f32 {
+        \\    return [1]f32{0}**16;
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:3:17: error: expected type '[4]f32', found '[16]f32'",
+    });
+
+    cases.add("generic function call assigned to incorrect type",
+        \\pub export fn entry() void {
+        \\    var res: []i32 = undefined;
+        \\    res = myAlloc(i32);
+        \\}
+        \\fn myAlloc(comptime arg: type) anyerror!arg{
+        \\    unreachable;
+        \\}
+    , &[_][]const u8{
+        "tmp.zig:3:18: error: expected type '[]i32', found 'anyerror!i32",
+    });
+
     cases.addTest("non-exhaustive enums",
         \\const A = enum {
         \\    a,
@@ -272,12 +386,10 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         , &[_][]const u8{
             "tmp.zig:3:5: error: target arch 'wasm32' does not support calling with a new stack",
         });
-        tc.target = tests.Target{
-            .Cross = tests.CrossTarget{
-                .arch = .wasm32,
-                .os = .wasi,
-                .abi = .none,
-            },
+        tc.target = std.zig.CrossTarget{
+            .cpu_arch = .wasm32,
+            .os_tag = .wasi,
+            .abi = .none,
         };
         break :x tc;
     });
@@ -673,12 +785,10 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         , &[_][]const u8{
             "tmp.zig:2:14: error: could not find 'foo' in the inputs or outputs",
         });
-        tc.target = tests.Target{
-            .Cross = tests.CrossTarget{
-                .arch = .x86_64,
-                .os = .linux,
-                .abi = .gnu,
-            },
+        tc.target = std.zig.CrossTarget{
+            .cpu_arch = .x86_64,
+            .os_tag = .linux,
+            .abi = .gnu,
         };
         break :x tc;
     });
@@ -1286,24 +1396,6 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         "tmp.zig:8:28: note: referenced here",
     });
 
-    cases.add("@typeInfo causing depend on itself compile error",
-        \\const start = struct {
-        \\    fn crash() bug() {
-        \\        return bug;
-        \\    }
-        \\};
-        \\fn bug() void {
-        \\    _ = @typeInfo(start).Struct;
-        \\}
-        \\export fn entry() void {
-        \\    var boom = start.crash();
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:7:9: error: dependency loop detected",
-        "tmp.zig:2:19: note: referenced here",
-        "tmp.zig:10:21: note: referenced here",
-    });
-
     cases.add("enum field value references enum",
         \\pub const Foo = extern enum {
         \\    A = Foo.B,
@@ -1356,7 +1448,7 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         "tmp.zig:2:18: error: invalid operands to binary expression: 'error{A}' and 'error{B}'",
     });
 
-    if (builtin.os == builtin.Os.linux) {
+    if (std.Target.current.os.tag == .linux) {
         cases.addTest("implicit dependency on libc",
             \\extern "c" fn exit(u8) void;
             \\export fn entry() void {
@@ -1587,7 +1679,7 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\    var ptr: [*c]u8 = (1 << 64) + 1;
         \\}
         \\export fn b() void {
-        \\    var x: @IntType(false, 65) = 0x1234;
+        \\    var x: u65 = 0x1234;
         \\    var ptr: [*c]u8 = x;
         \\}
     , &[_][]const u8{
@@ -1649,7 +1741,7 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
     cases.addTest("return invalid type from test",
         \\test "example" { return 1; }
     , &[_][]const u8{
-        "tmp.zig:1:25: error: integer value 1 cannot be coerced to type 'void'",
+        "tmp.zig:1:25: error: expected type 'void', found 'comptime_int'",
     });
 
     cases.add("threadlocal qualifier on const",
@@ -1826,13 +1918,12 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
 
     cases.add("exceeded maximum bit width of integer",
         \\export fn entry1() void {
-        \\    const T = @IntType(false, 65536);
+        \\    const T = u65536;
         \\}
         \\export fn entry2() void {
         \\    var x: i65536 = 1;
         \\}
     , &[_][]const u8{
-        "tmp.zig:2:31: error: integer value 65536 cannot be coerced to type 'u16'",
         "tmp.zig:5:12: error: primitive integer type 'i65536' exceeds maximum bit width of 65535",
     });
 
@@ -2478,7 +2569,7 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\    var rule_set = try Foo.init();
         \\}
     , &[_][]const u8{
-        "tmp.zig:2:10: error: expected type 'i32', found 'type'",
+        "tmp.zig:2:19: error: expected type 'i32', found 'type'",
     });
 
     cases.add("slicing single-item pointer",
@@ -2645,16 +2736,6 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\}
     , &[_][]const u8{
         "tmp.zig:5:5: error: else prong required when switching on type 'anyerror'",
-    });
-
-    cases.add("inferred error set with no returned error",
-        \\export fn entry() void {
-        \\    foo() catch unreachable;
-        \\}
-        \\fn foo() !void {
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:4:11: error: function with inferred error set must return at least one possible error",
     });
 
     cases.add("error not handled in switch",
@@ -2870,14 +2951,6 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\}
     , &[_][]const u8{
         "tmp.zig:11:13: error: error.B not a member of error set 'Set2'",
-    });
-
-    cases.add("@memberCount of error",
-        \\comptime {
-        \\    _ = @memberCount(anyerror);
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:2:9: error: global error set member count not available at comptime",
     });
 
     cases.add("duplicate error value in error set",
@@ -3384,7 +3457,7 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\
         \\fn b() void {}
     , &[_][]const u8{
-        "tmp.zig:3:6: error: unreachable code",
+        "tmp.zig:3:5: error: unreachable code",
     });
 
     cases.add("bad import",
@@ -4002,8 +4075,8 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\
         \\export fn entry() usize { return @sizeOf(@TypeOf(Foo)); }
     , &[_][]const u8{
-        "tmp.zig:5:25: error: unable to evaluate constant expression",
-        "tmp.zig:2:12: note: referenced here",
+        "tmp.zig:5:25: error: cannot store runtime value in compile time variable",
+        "tmp.zig:2:12: note: called from here",
     });
 
     cases.add("addition with non numbers",
@@ -4643,7 +4716,6 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\fn something() anyerror!void { }
     , &[_][]const u8{
         "tmp.zig:2:5: error: expected type 'void', found 'anyerror'",
-        "tmp.zig:1:15: note: return type declared here",
     });
 
     cases.add("invalid pointer for var type",
@@ -4674,16 +4746,6 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\export fn entry() usize { return @sizeOf(@TypeOf(f)); }
     , &[_][]const u8{
         "tmp.zig:1:15: error: comptime parameter not allowed in function with calling convention 'C'",
-    });
-
-    cases.add("convert fixed size array to slice with invalid size",
-        \\export fn f() void {
-        \\    var array: [5]u8 = undefined;
-        \\    var foo = @bytesToSlice(u32, &array)[0];
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:3:15: error: unable to convert [5]u8 to []align(1) u32: size mismatch",
-        "tmp.zig:3:29: note: u32 has size 4; remaining bytes: 1",
     });
 
     cases.add("non-pure function returns type",
@@ -5260,25 +5322,6 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         "tmp.zig:2:30: error: cannot set section of local variable 'foo'",
     });
 
-    cases.add("returning address of local variable - simple",
-        \\export fn foo() *i32 {
-        \\    var a: i32 = undefined;
-        \\    return &a;
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:3:13: error: function returns address of local variable",
-    });
-
-    cases.add("returning address of local variable - phi",
-        \\export fn foo(c: bool) *i32 {
-        \\    var a: i32 = undefined;
-        \\    var b: i32 = undefined;
-        \\    return if (c) &a else &b;
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:4:12: error: function returns address of local variable",
-    });
-
     cases.add("inner struct member shadowing outer struct member",
         \\fn A() type {
         \\    return struct {
@@ -5566,7 +5609,7 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
     });
 
     cases.add("globally shadowing a primitive type",
-        \\const u16 = @intType(false, 8);
+        \\const u16 = u8;
         \\export fn entry() void {
         \\    const a: u16 = 300;
         \\}
@@ -5734,7 +5777,7 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\    @export(entry, .{.name = "entry", .linkage = @as(u32, 1234) });
         \\}
     , &[_][]const u8{
-        "tmp.zig:3:50: error: expected type 'std.builtin.GlobalLinkage', found 'u32'",
+        "tmp.zig:3:59: error: expected type 'std.builtin.GlobalLinkage', found 'comptime_int'",
     });
 
     cases.add("struct with invalid field",
@@ -5757,7 +5800,7 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\
         \\export fn entry() void {
         \\    const a = MdNode.Header {
-        \\        .text = MdText.init(&std.debug.global_allocator),
+        \\        .text = MdText.init(&std.testing.allocator),
         \\        .weight = HeaderWeight.H1,
         \\    };
         \\}
@@ -5905,93 +5948,6 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         "\ttrue\n" ++
         "}\n", &[_][]const u8{
         "tmp.zig:2:1: error: invalid character: '\\t'",
-    });
-
-    cases.add("@ArgType given non function parameter",
-        \\comptime {
-        \\    _ = @ArgType(i32, 3);
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:2:18: error: expected function, found 'i32'",
-    });
-
-    cases.add("@ArgType arg index out of bounds",
-        \\comptime {
-        \\    _ = @ArgType(@TypeOf(add), 2);
-        \\}
-        \\fn add(a: i32, b: i32) i32 { return a + b; }
-    , &[_][]const u8{
-        "tmp.zig:2:32: error: arg index 2 out of bounds; 'fn(i32, i32) i32' has 2 arguments",
-    });
-
-    cases.add("@memberType on unsupported type",
-        \\comptime {
-        \\    _ = @memberType(i32, 0);
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:2:21: error: type 'i32' does not support @memberType",
-    });
-
-    cases.add("@memberType on enum",
-        \\comptime {
-        \\    _ = @memberType(Foo, 0);
-        \\}
-        \\const Foo = enum {A,};
-    , &[_][]const u8{
-        "tmp.zig:2:21: error: type 'Foo' does not support @memberType",
-    });
-
-    cases.add("@memberType struct out of bounds",
-        \\comptime {
-        \\    _ = @memberType(Foo, 0);
-        \\}
-        \\const Foo = struct {};
-    , &[_][]const u8{
-        "tmp.zig:2:26: error: member index 0 out of bounds; 'Foo' has 0 members",
-    });
-
-    cases.add("@memberType union out of bounds",
-        \\comptime {
-        \\    _ = @memberType(Foo, 1);
-        \\}
-        \\const Foo = union {A: void,};
-    , &[_][]const u8{
-        "tmp.zig:2:26: error: member index 1 out of bounds; 'Foo' has 1 members",
-    });
-
-    cases.add("@memberName on unsupported type",
-        \\comptime {
-        \\    _ = @memberName(i32, 0);
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:2:21: error: type 'i32' does not support @memberName",
-    });
-
-    cases.add("@memberName struct out of bounds",
-        \\comptime {
-        \\    _ = @memberName(Foo, 0);
-        \\}
-        \\const Foo = struct {};
-    , &[_][]const u8{
-        "tmp.zig:2:26: error: member index 0 out of bounds; 'Foo' has 0 members",
-    });
-
-    cases.add("@memberName enum out of bounds",
-        \\comptime {
-        \\    _ = @memberName(Foo, 1);
-        \\}
-        \\const Foo = enum {A,};
-    , &[_][]const u8{
-        "tmp.zig:2:26: error: member index 1 out of bounds; 'Foo' has 1 members",
-    });
-
-    cases.add("@memberName union out of bounds",
-        \\comptime {
-        \\    _ = @memberName(Foo, 1);
-        \\}
-        \\const Foo = union {A:i32,};
-    , &[_][]const u8{
-        "tmp.zig:2:26: error: member index 1 out of bounds; 'Foo' has 1 members",
     });
 
     cases.add("calling var args extern function, passing array instead of pointer",
@@ -6415,15 +6371,6 @@ pub fn addCases(cases: *tests.CompileErrorContext) void {
         \\}
     , &[_][]const u8{
         "tmp.zig:3:25: error: ReturnType has not been resolved because 'fn(var) var' is generic",
-    });
-
-    cases.add("getting @ArgType of generic function",
-        \\fn generic(a: var) void {}
-        \\comptime {
-        \\    _ = @ArgType(@TypeOf(generic), 0);
-        \\}
-    , &[_][]const u8{
-        "tmp.zig:3:36: error: @ArgType could not resolve the type of arg 0 because 'fn(var) var' is generic",
     });
 
     cases.add("unsupported modifier at start of asm output constraint",

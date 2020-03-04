@@ -304,20 +304,6 @@ fn cast128Float(x: u128) f128 {
     return @bitCast(f128, x);
 }
 
-test "const slice widen cast" {
-    const bytes align(4) = [_]u8{
-        0x12,
-        0x12,
-        0x12,
-        0x12,
-    };
-
-    const u32_value = @bytesToSlice(u32, bytes[0..])[0];
-    expect(u32_value == 0x12121212);
-
-    expect(@bitCast(u32, bytes) == 0x12121212);
-}
-
 test "single-item pointer of array to slice and to unknown length pointer" {
     testCastPtrOfArrayToSliceAndPtr();
     comptime testCastPtrOfArrayToSliceAndPtr();
@@ -390,12 +376,6 @@ test "comptime_int @intToFloat" {
         expect(@TypeOf(result) == f32);
         expect(result == 1234.0);
     }
-}
-
-test "@bytesToSlice keeps pointer alignment" {
-    var bytes = [_]u8{ 0x01, 0x02, 0x03, 0x04 };
-    const numbers = @bytesToSlice(u32, bytes[0..]);
-    comptime expect(@TypeOf(numbers) == []align(@alignOf(@TypeOf(bytes))) u32);
 }
 
 test "@intCast i32 to u7" {
@@ -509,6 +489,17 @@ test "@intToEnum passed a comptime_int to an enum with one item" {
     };
     const x = @intToEnum(E, 0);
     expect(x == E.A);
+}
+
+test "@intToEnum runtime to  an extern enum with duplicate values" {
+    const E = extern enum(u8) {
+        A = 1,
+        B = 1,
+    };
+    var a: u8 = 1;
+    var x = @intToEnum(E, a);
+    expect(x == E.A);
+    expect(x == E.B);
 }
 
 test "@intCast to u0 and use the result" {
@@ -767,4 +758,31 @@ test "variable initialization uses result locations properly with regards to the
     var b = true;
     const x: i32 = if (b) 1 else 2;
     expect(x == 1);
+}
+
+test "cast between [*c]T and ?[*:0]T on fn parameter" {
+    const S = struct {
+        const Handler = ?extern fn ([*c]const u8) void;
+        fn addCallback(handler: Handler) void {}
+
+        fn myCallback(cstr: ?[*:0]const u8) callconv(.C) void {}
+
+        fn doTheTest() void {
+            addCallback(myCallback);
+        }
+    };
+    S.doTheTest();
+}
+
+test "cast between C pointer with different but compatible types" {
+    const S = struct {
+        fn foo(arg: [*]c_ushort) u16 {
+            return arg[0];
+        }
+        fn doTheTest() void {
+            var x = [_]u16{ 4, 2, 1, 3 };
+            expect(foo(@ptrCast([*]u16, &x)) == 4);
+        }
+    };
+    S.doTheTest();
 }

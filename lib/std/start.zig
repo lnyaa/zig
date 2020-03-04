@@ -8,20 +8,11 @@ const uefi = std.os.uefi;
 
 var starting_stack_ptr: [*]usize = undefined;
 
-const is_wasm = switch (builtin.arch) {
-    .wasm32, .wasm64 => true,
-    else => false,
-};
-
-const is_mips = switch (builtin.arch) {
-    .mips, .mipsel, .mips64, .mips64el => true,
-    else => false,
-};
-const start_sym_name = if (is_mips) "__start" else "_start";
+const start_sym_name = if (builtin.arch.isMIPS()) "__start" else "_start";
 
 comptime {
     if (builtin.output_mode == .Lib and builtin.link_mode == .Dynamic) {
-        if (builtin.os == .windows and !@hasDecl(root, "_DllMainCRTStartup")) {
+        if (builtin.os.tag == .windows and !@hasDecl(root, "_DllMainCRTStartup")) {
             @export(_DllMainCRTStartup, .{ .name = "_DllMainCRTStartup" });
         }
     } else if (builtin.output_mode == .Exe or @hasDecl(root, "main")) {
@@ -29,21 +20,27 @@ comptime {
             if (@typeInfo(@TypeOf(root.main)).Fn.calling_convention != .C) {
                 @export(main, .{ .name = "main", .linkage = .Weak });
             }
-        } else if (builtin.os == .windows) {
-            if (!@hasDecl(root, "WinMain") and !@hasDecl(root, "WinMainCRTStartup")) {
+        } else if (builtin.os.tag == .windows) {
+            if (!@hasDecl(root, "WinMain") and !@hasDecl(root, "WinMainCRTStartup") and
+                !@hasDecl(root, "wWinMain") and !@hasDecl(root, "wWinMainCRTStartup"))
+            {
                 @export(WinMainCRTStartup, .{ .name = "WinMainCRTStartup" });
             }
-        } else if (builtin.os == .uefi) {
+        } else if (builtin.os.tag == .uefi) {
             if (!@hasDecl(root, "EfiMain")) @export(EfiMain, .{ .name = "EfiMain" });
-        } else if (is_wasm and builtin.os == .freestanding) {
+        } else if (builtin.arch.isWasm() and builtin.os.tag == .freestanding) {
             if (!@hasDecl(root, start_sym_name)) @export(wasm_freestanding_start, .{ .name = start_sym_name });
-        } else if (builtin.os != .other and builtin.os != .freestanding) {
+        } else if (builtin.os.tag != .other and builtin.os.tag != .freestanding) {
             if (!@hasDecl(root, start_sym_name)) @export(_start, .{ .name = start_sym_name });
         }
     }
 }
 
-fn _DllMainCRTStartup(hinstDLL: std.os.windows.HINSTANCE, fdwReason: std.os.windows.DWORD, lpReserved: std.os.windows.LPVOID) callconv(.Stdcall) std.os.windows.BOOL {
+fn _DllMainCRTStartup(
+    hinstDLL: std.os.windows.HINSTANCE,
+    fdwReason: std.os.windows.DWORD,
+    lpReserved: std.os.windows.LPVOID,
+) callconv(.Stdcall) std.os.windows.BOOL {
     if (@hasDecl(root, "DllMain")) {
         return root.DllMain(hinstDLL, fdwReason, lpReserved);
     }
@@ -81,7 +78,7 @@ fn EfiMain(handle: uefi.Handle, system_table: *uefi.tables.SystemTable) callconv
 }
 
 fn _start() callconv(.Naked) noreturn {
-    if (builtin.os == builtin.Os.wasi) {
+    if (builtin.os.tag == .wasi) {
         // This is marked inline because for some reason LLVM in release mode fails to inline it,
         // and we want fewer call frames in stack traces.
         std.os.wasi.proc_exit(@call(.{ .modifier = .always_inline }, callMain, .{}));
@@ -136,7 +133,7 @@ fn WinMainCRTStartup() callconv(.Stdcall) noreturn {
 
 // TODO https://github.com/ziglang/zig/issues/265
 fn posixCallMainAndExit() noreturn {
-    if (builtin.os == builtin.Os.freebsd) {
+    if (builtin.os.tag == .freebsd) {
         @setAlignStack(16);
     }
     const argc = starting_stack_ptr[0];
@@ -147,7 +144,7 @@ fn posixCallMainAndExit() noreturn {
     while (envp_optional[envp_count]) |_| : (envp_count += 1) {}
     const envp = @ptrCast([*][*:0]u8, envp_optional)[0..envp_count];
 
-    if (builtin.os == .linux) {
+    if (builtin.os.tag == .linux) {
         // Find the beginning of the auxiliary vector
         const auxv = @ptrCast([*]std.elf.Auxv, @alignCast(@alignOf(usize), envp.ptr + envp_count + 1));
         std.os.linux.elf_aux_maybe = auxv;

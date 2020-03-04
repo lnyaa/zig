@@ -7,7 +7,10 @@ usingnamespace @import("../os/bits.zig");
 
 extern "c" fn __error() *c_int;
 pub extern "c" fn _NSGetExecutablePath(buf: [*]u8, bufsize: *u32) c_int;
+pub extern "c" fn _dyld_image_count() u32;
 pub extern "c" fn _dyld_get_image_header(image_index: u32) ?*mach_header;
+pub extern "c" fn _dyld_get_image_vmaddr_slide(image_index: u32) usize;
+pub extern "c" fn _dyld_get_image_name(image_index: u32) [*:0]const u8;
 
 pub extern "c" fn __getdirentries64(fd: c_int, buf_ptr: [*]u8, buf_len: usize, basep: *i64) isize;
 
@@ -51,6 +54,22 @@ pub extern "c" fn mach_host_self() mach_port_t;
 pub extern "c" fn clock_get_time(clock_serv: clock_serv_t, cur_time: *mach_timespec_t) kern_return_t;
 pub extern "c" fn host_get_clock_service(host: host_t, clock_id: clock_id_t, clock_serv: ?[*]clock_serv_t) kern_return_t;
 pub extern "c" fn mach_port_deallocate(task: ipc_space_t, name: mach_port_name_t) kern_return_t;
+
+pub const sf_hdtr = extern struct {
+    headers: [*]const iovec_const,
+    hdr_cnt: c_int,
+    trailers: [*]const iovec_const,
+    trl_cnt: c_int,
+};
+
+pub extern "c" fn sendfile(
+    out_fd: fd_t,
+    in_fd: fd_t,
+    offset: off_t,
+    len: *off_t,
+    sf_hdtr: ?*sf_hdtr,
+    flags: u32,
+) c_int;
 
 pub fn sigaddset(set: *sigset_t, signo: u5) void {
     set.* |= @as(u32, 1) << (signo - 1);

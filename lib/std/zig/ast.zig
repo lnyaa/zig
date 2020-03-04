@@ -10,6 +10,7 @@ pub const TokenIndex = usize;
 pub const Tree = struct {
     source: []const u8,
     tokens: TokenList,
+
     /// undefined on parse error (errors not empty)
     root_node: *Node.Root,
     arena_allocator: std.heap.ArenaAllocator,
@@ -456,10 +457,9 @@ pub const Node = struct {
     }
 
     pub fn iterate(base: *Node, index: usize) ?*Node {
-        comptime var i = 0;
-        inline while (i < @memberCount(Id)) : (i += 1) {
-            if (base.id == @field(Id, @memberName(Id, i))) {
-                const T = @field(Node, @memberName(Id, i));
+        inline for (@typeInfo(Id).Enum.fields) |f| {
+            if (base.id == @field(Id, f.name)) {
+                const T = @field(Node, f.name);
                 return @fieldParentPtr(T, "base", base).iterate(index);
             }
         }
@@ -467,10 +467,9 @@ pub const Node = struct {
     }
 
     pub fn firstToken(base: *const Node) TokenIndex {
-        comptime var i = 0;
-        inline while (i < @memberCount(Id)) : (i += 1) {
-            if (base.id == @field(Id, @memberName(Id, i))) {
-                const T = @field(Node, @memberName(Id, i));
+        inline for (@typeInfo(Id).Enum.fields) |f| {
+            if (base.id == @field(Id, f.name)) {
+                const T = @field(Node, f.name);
                 return @fieldParentPtr(T, "base", base).firstToken();
             }
         }
@@ -478,10 +477,9 @@ pub const Node = struct {
     }
 
     pub fn lastToken(base: *const Node) TokenIndex {
-        comptime var i = 0;
-        inline while (i < @memberCount(Id)) : (i += 1) {
-            if (base.id == @field(Id, @memberName(Id, i))) {
-                const T = @field(Node, @memberName(Id, i));
+        inline for (@typeInfo(Id).Enum.fields) |f| {
+            if (base.id == @field(Id, f.name)) {
+                const T = @field(Node, f.name);
                 return @fieldParentPtr(T, "base", base).lastToken();
             }
         }
@@ -489,10 +487,9 @@ pub const Node = struct {
     }
 
     pub fn typeToId(comptime T: type) Id {
-        comptime var i = 0;
-        inline while (i < @memberCount(Id)) : (i += 1) {
-            if (T == @field(Node, @memberName(Id, i))) {
-                return @field(Id, @memberName(Id, i));
+        inline for (@typeInfo(Id).Enum.fields) |f| {
+            if (T == @field(Node, f.name)) {
+                return @field(Id, f.name);
             }
         }
         unreachable;
@@ -780,6 +777,11 @@ pub const Node = struct {
                 i -= 1;
             }
 
+            if (self.align_expr) |align_expr| {
+                if (i < 1) return align_expr;
+                i -= 1;
+            }
+
             if (self.value_expr) |value_expr| {
                 if (i < 1) return value_expr;
                 i -= 1;
@@ -795,6 +797,11 @@ pub const Node = struct {
         pub fn lastToken(self: *const ContainerField) TokenIndex {
             if (self.value_expr) |value_expr| {
                 return value_expr.lastToken();
+            }
+            if (self.align_expr) |align_expr| {
+                // The expression refers to what's inside the parenthesis, the
+                // last token is the closing one
+                return align_expr.lastToken() + 1;
             }
             if (self.type_expr) |type_expr| {
                 return type_expr.lastToken();
@@ -1553,7 +1560,9 @@ pub const Node = struct {
         pub const Op = union(enum) {
             AddressOf,
             ArrayType: ArrayInfo,
-            Await,
+            Await: struct {
+                noasync_token: ?TokenIndex = null,
+            },
             BitNot,
             BoolNot,
             Cancel,
@@ -2170,10 +2179,10 @@ pub const Node = struct {
         pub fn iterate(self: *Asm, index: usize) ?*Node {
             var i = index;
 
-            if (i < self.outputs.len) return &self.outputs.at(index).*.base;
+            if (i < self.outputs.len) return &self.outputs.at(i).*.base;
             i -= self.outputs.len;
 
-            if (i < self.inputs.len) return &self.inputs.at(index).*.base;
+            if (i < self.inputs.len) return &self.inputs.at(i).*.base;
             i -= self.inputs.len;
 
             return null;
@@ -2287,7 +2296,7 @@ pub const Node = struct {
 test "iterate" {
     var root = Node.Root{
         .base = Node{ .id = Node.Id.Root },
-        .decls = Node.Root.DeclList.init(std.debug.global_allocator),
+        .decls = Node.Root.DeclList.init(std.testing.allocator),
         .eof_token = 0,
     };
     var base = &root.base;
