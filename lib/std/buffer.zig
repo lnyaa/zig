@@ -81,12 +81,18 @@ pub const Buffer = struct {
         self.list.deinit();
     }
 
-    pub fn toSlice(self: Buffer) [:0]u8 {
-        return self.list.toSlice()[0..self.len() :0];
+    pub fn span(self: var) @TypeOf(self.list.items[0 .. self.list.len - 1 :0]) {
+        return self.list.span()[0..self.len() :0];
     }
 
+    /// Deprecated: use `span`
+    pub fn toSlice(self: Buffer) [:0]u8 {
+        return self.span();
+    }
+
+    /// Deprecated: use `span`
     pub fn toSliceConst(self: Buffer) [:0]const u8 {
-        return self.list.toSliceConst()[0..self.len() :0];
+        return self.span();
     }
 
     pub fn shrink(self: *Buffer, new_len: usize) void {
@@ -151,6 +157,17 @@ pub const Buffer = struct {
     pub fn print(self: *Buffer, comptime fmt: []const u8, args: var) !void {
         return std.fmt.format(self, error{OutOfMemory}, Buffer.append, fmt, args);
     }
+
+    pub fn outStream(self: *Buffer) std.io.OutStream(*Buffer, error{OutOfMemory}, appendWrite) {
+        return .{ .context = self };
+    }
+
+    /// Same as `append` except it returns the number of bytes written, which is always the same
+    /// as `m.len`. The purpose of this function existing is to match `std.io.OutStream` API.
+    pub fn appendWrite(self: *Buffer, m: []const u8) !usize {
+        try self.append(m);
+        return m.len;
+    }
 };
 
 test "simple Buffer" {
@@ -201,4 +218,16 @@ test "Buffer.print" {
 
     try buf.print("Hello {} the {}", .{ 2, "world" });
     testing.expect(buf.eql("Hello 2 the world"));
+}
+
+test "Buffer.outStream" {
+    var buffer = try Buffer.initSize(testing.allocator, 0);
+    defer buffer.deinit();
+    const buf_stream = buffer.outStream();
+
+    const x: i32 = 42;
+    const y: i32 = 1234;
+    try buf_stream.print("x: {}\ny: {}\n", .{ x, y });
+
+    testing.expect(mem.eql(u8, buffer.toSlice(), "x: 42\ny: 1234\n"));
 }
