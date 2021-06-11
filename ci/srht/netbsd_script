@@ -5,7 +5,7 @@ set -e
 
 sudo pkgin -y update
 sudo pkgin -y upgrade
-sudo pkgin -y install cmake samurai curl jq py27-s3cmd
+sudo pkgin -y install cmake samurai curl jq py27-s3cmd wget
 
 ZIGDIR="$(pwd)"
 # CACHE_BASENAME="zig+llvm+lld+clang-x86_64-netbsd-gnu-0.8.0-dev.2703+c12704a33"
