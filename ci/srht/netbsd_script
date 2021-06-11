@@ -13,7 +13,7 @@ CACHE_BASENAME="zig-bootstrap-build-x86_64-netbsd-gnu.tar.xz"
 PREFIX="$HOME/$CACHE_BASENAME"
 
 cd $HOME
-wget -nv "https://zigcitest.lavatech.top/$CACHE_BASENAME.tar.xz"
+wget -nv "http://zigcitest.lavatech.top/$CACHE_BASENAME.tar.xz"
 tar xf "$CACHE_BASENAME.tar.xz"
 
 cd $ZIGDIR
