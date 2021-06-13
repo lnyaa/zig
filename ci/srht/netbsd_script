@@ -31,6 +31,15 @@ export TERM=dumb
 
 mkdir build
 cd build
+export CC="$PREFIX/bin/zigcc"
+export CXX="$PREFIX/bin/zigcxx"
+echo "#!/bin/sh
+env CC=\"clang\" $PREFIX/bin/zig cc \"\$@\"" > $CC
+echo "#!/bin/sh
+env CC=\"clang\" $PREFIX/bin/zig c++ \"\$@\"" > $CXX
+chmod +x $CC
+chmod +x $CXX
+
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH=$PREFIX \
@@ -39,6 +48,9 @@ cmake .. \
     -DZIG_TARGET_TRIPLE=x86_64-netbsd-none \
     -GNinja
 samu install
+
+unset CC
+unset CXX
 
 # Here we skip some tests to save time.
 release/bin/zig build test -Dskip-compile-errors -Dskip-non-native
