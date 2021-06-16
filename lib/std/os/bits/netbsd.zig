@@ -515,6 +515,8 @@ pub const SO_NOSIGPIPE = 0x0800;
 pub const SO_ACCEPTFILTER = 0x1000;
 pub const SO_TIMESTAMP = 0x2000;
 pub const SO_RERROR = 0x4000;
+pub const SO_SNDTIMEO = 0x100b;
+pub const SO_RCVTIMEO = 0x100c;
 
 pub const SOL_SOCKET = 0xffff;
 
