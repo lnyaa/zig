@@ -501,6 +501,21 @@ pub const SOCK_SEQPACKET = 5;
 pub const SOCK_CLOEXEC = 0x10000000;
 pub const SOCK_NONBLOCK = 0x20000000;
 
+pub const SO_DEBUG = 0x0001;
+pub const SO_ACCEPTCONN = 0x0002;
+pub const SO_REUSEADDR = 0x0004;
+pub const SO_KEEPALIVE = 0x0008;
+pub const SO_DONTROUTE = 0x0010;
+pub const SO_BROADCAST = 0x0020;
+pub const SO_USELOOPBACK = 0x0040;
+pub const SO_LINGER = 0x0080;
+pub const SO_OOBINLINE = 0x0100;
+pub const SO_REUSEPORT = 0x0200;
+pub const SO_NOSIGPIPE = 0x0800;
+pub const SO_ACCEPTFILTER = 0x1000;
+pub const SO_TIMESTAMP = 0x2000;
+pub const SO_RERROR = 0x4000;
+
 pub const SOL_SOCKET = 0xffff;
 
 pub const PF_UNSPEC = 0;
