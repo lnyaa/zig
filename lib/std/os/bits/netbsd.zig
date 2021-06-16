@@ -501,6 +501,8 @@ pub const SOCK_SEQPACKET = 5;
 pub const SOCK_CLOEXEC = 0x10000000;
 pub const SOCK_NONBLOCK = 0x20000000;
 
+pub const SOL_SOCKET = 0xffff;
+
 pub const PF_UNSPEC = 0;
 pub const PF_LOCAL = 1;
 pub const PF_UNIX = PF_LOCAL;
