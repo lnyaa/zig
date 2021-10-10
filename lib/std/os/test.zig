@@ -808,3 +808,16 @@ test "writev longer than IOV_MAX" {
     const amt = try file.writev(&iovecs);
     try testing.expectEqual(@as(usize, os.IOV_MAX), amt);
 }
+
+test "sigaddset" {
+    if (native_os != .linux and native_os != .macos) return error.SkipZigTest;
+
+    var mask = os.empty_sigset;
+    os.linux.sigaddset(&mask, os.SIG.TERM);
+    os.linux.sigaddset(&mask, os.SIG.INT);
+    try testing.expect(!switch (native_os) {
+        .linux => std.mem.eql(u32, &mask, &os.empty_sigset),
+        .macos => mask == os.empty_sigset,
+        else => return error.SkipZigTest,
+    });
+}

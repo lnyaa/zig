@@ -6343,3 +6343,11 @@ pub fn madvise(ptr: [*]align(mem.page_size) u8, length: usize, advice: u32) Madv
         else => |err| return unexpectedErrno(err),
     }
 }
+
+pub fn sigaddset(set: *sigset_t, signal: u8) UnexpectedError!void {
+    switch (errno(system.sigaddset(set, signal))) {
+        .SUCCESS => return,
+        .INVAL => unreachable, // given signal should come from SIG enum
+        else => |err| return unexpectedErrno(err),
+    }
+}

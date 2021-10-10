@@ -71,6 +71,7 @@ pub usingnamespace switch (builtin.os.tag) {
         pub extern "c" fn sched_yield() c_int;
         pub extern "c" fn sigaction(sig: c_int, noalias act: ?*const c.Sigaction, noalias oact: ?*c.Sigaction) c_int;
         pub extern "c" fn sigprocmask(how: c_int, noalias set: ?*const c.sigset_t, noalias oset: ?*c.sigset_t) c_int;
+        pub extern "c" fn sigaddset(set: ?*c.sigset_t, signal: c_int) c_int;
         pub extern "c" fn socket(domain: c_uint, sock_type: c_uint, protocol: c_uint) c_int;
         pub extern "c" fn stat(noalias path: [*:0]const u8, noalias buf: *c.Stat) c_int;
         pub extern "c" fn sigfillset(set: ?*c.sigset_t) void;
